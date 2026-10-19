@@ -1,0 +1,79 @@
+appId: studio.rea.app
+productName: REA Studio
+copyright: "Copyright © 2026 REA Studio Contributors"
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+publish: null
+
+extraMetadata:
+  main: dist-electron/index.js
+
+# Windows Configuration (Current Host OS)
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  executableName: rea-studio
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: REA Studio
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+
+# macOS Configuration (Configured for dmg and zip)
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+        - universal
+    - target: zip
+      arch:
+        - x64
+        - arm64
+        - universal
+  category: public.app-category.developer-tools
+  icon: build/icon.png
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# Linux Configuration (Configured for AppImage and deb)
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Development
+  icon: build/icons
+  executableName: rea-studio
+  synopsis: Desktop reverse engineering application powered by REA and Claude
+  description: A polished, chat-style desktop application for reverse-engineering anything.

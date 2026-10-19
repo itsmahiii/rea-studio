@@ -1,0 +1,93 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Markdown Findings Report Generator with Snapshots > generates reproducible Markdown report matching snapshot 1`] = `
+"# REA Studio Findings Report: secure-vault.exe
+
+**Generated:** <TIMESTAMP>
+**Session ID:** \`session-fixture-42\`
+
+---
+
+## 1. Target Summary
+
+- **Target Name:** secure-vault.exe
+- **Absolute Path:** \`C:/targets/secure-vault.exe\`
+- **Target Classification:** \`native_pe\`
+- **Size:** 1048576 bytes (1024.0 KB)
+- **Is Directory:** No
+
+## 2. Environment & Configuration
+
+- **REA MCP Server Version:** v6.7.0
+- **Analysis Provider:** ghidra
+- **Host Platform:** win32 (x64)
+- **Host Node Runtime:** v24.22.0
+
+## 3. Investigation Objectives & Questions Asked
+
+1. Analyze the cryptographic initialization routine in this binary and verify if symbols are stripped.
+
+## 4. Key Findings & Evidence
+
+### Binary Layout: Format: PE32+ | Arch: x86_64 | Entry: 0x140001000
+- **Source Tool:** \`binary_overview\`
+- **Location:** Address: \`0x140001000\`
+- **Details:** Security Mitigations: {"aslr":true,"dep":true,"cfg":true}
+
+## 5. References & Code Locations
+
+### Decompiled Pseudocode: init_master_keyring
+- **Source Tool:** \`procedure_pseudo_code\`
+- **Location:** Function: \`init_master_keyring\` | Address: \`0x140002040\`
+
+\`\`\`c
+int __fastcall init_master_keyring(void *ctx) {
+    unsigned char seed[32];
+    if (!read_entropy(seed, 32)) return -1;
+    return aes_key_setup(ctx, seed);
+}
+\`\`\`
+
+## 6. Unknowns & Analysis Limitations
+
+- **Analysis Limitations reported by procedure_pseudo_code:** Static analysis unable to trace dynamic entropy source
+  - Caveat: Static analysis unable to trace dynamic entropy source
+- **Is the seed generated via BCryptGenRandom or hardware RNG?:** Domain: cryptography | Status: open
+
+## 7. Reproducibility & Audit Trail
+
+The following REA MCP tool invocations were executed during this investigation:
+
+### Step 1: \`binary_overview\`
+- **Status:** \`success\`
+- **Parameters:**
+\`\`\`json
+{
+  "target_path": "C:/targets/secure-vault.exe",
+  "api_key": "[REDACTED]"
+}
+\`\`\`
+
+### Step 2: \`procedure_pseudo_code\`
+- **Status:** \`success\`
+- **Parameters:**
+\`\`\`json
+{
+  "address": "0x140002040",
+  "provider": "ghidra"
+}
+\`\`\`
+
+### Step 3: \`record_unknown\`
+- **Status:** \`success\`
+- **Parameters:**
+\`\`\`json
+{
+  "question": "Is the seed generated via BCryptGenRandom or hardware RNG?",
+  "domain": "cryptography"
+}
+\`\`\`
+
+---
+*Report generated automatically by REA Studio*"
+`;
