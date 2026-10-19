@@ -13,7 +13,9 @@ import type {
   RespondApprovalRequest,
   RespondApprovalResponse,
   SetApiKeyRequest,
+  HasApiKeyRequest,
   HasApiKeyResponse,
+  ClearApiKeyRequest,
   ClearApiKeyResponse,
   SaveReportRequest,
   SaveReportResponse,
@@ -59,8 +61,8 @@ export interface ElectronAPI {
   };
   apiKey: {
     set: (req: SetApiKeyRequest) => Promise<IpcResult<{ success: boolean }>>;
-    has: () => Promise<IpcResult<HasApiKeyResponse>>;
-    clear: () => Promise<IpcResult<ClearApiKeyResponse>>;
+    has: (req?: HasApiKeyRequest) => Promise<IpcResult<HasApiKeyResponse>>;
+    clear: (req?: ClearApiKeyRequest) => Promise<IpcResult<ClearApiKeyResponse>>;
   };
   export: {
     saveReport: (req: SaveReportRequest) => Promise<IpcResult<SaveReportResponse>>;

@@ -193,18 +193,39 @@ export type RespondApprovalResponse = z.infer<typeof RespondApprovalResponseSche
 // -------------------------------------------------------------
 // Schemas: API Key
 // -------------------------------------------------------------
+// Schemas: API Key
+// -------------------------------------------------------------
+export const ModelProviderSchema = z.enum([
+  'anthropic',
+  'openai',
+  'gemini',
+  'openrouter',
+  'ollama',
+]);
+export type ModelProvider = z.infer<typeof ModelProviderSchema>;
+
 export const SetApiKeyRequestSchema = z.object({
   key: z.string().min(1),
+  provider: ModelProviderSchema.optional(),
 });
 export type SetApiKeyRequest = z.infer<typeof SetApiKeyRequestSchema>;
 
-export const HasApiKeyRequestSchema = z.object({});
+export const HasApiKeyRequestSchema = z.object({
+  provider: ModelProviderSchema.optional(),
+});
+export type HasApiKeyRequest = z.infer<typeof HasApiKeyRequestSchema>;
+
 export const HasApiKeyResponseSchema = z.object({
   hasKey: z.boolean(),
+  provider: ModelProviderSchema.optional(),
 });
 export type HasApiKeyResponse = z.infer<typeof HasApiKeyResponseSchema>;
 
-export const ClearApiKeyRequestSchema = z.object({});
+export const ClearApiKeyRequestSchema = z.object({
+  provider: ModelProviderSchema.optional(),
+});
+export type ClearApiKeyRequest = z.infer<typeof ClearApiKeyRequestSchema>;
+
 export const ClearApiKeyResponseSchema = z.object({
   success: z.boolean(),
 });
@@ -257,6 +278,8 @@ export type SystemInfoResponse = z.infer<typeof SystemInfoResponseSchema>;
 export const AppSettingsSchema = z.object({
   hasAcceptedLegal: z.boolean(),
   hasCompletedOnboarding: z.boolean(),
+  modelProvider: ModelProviderSchema.default('anthropic'),
+  providerBaseUrl: z.string().optional(),
   selectedModel: z.string(),
   customModel: z.string(),
   nativeProvider: z.string(),

@@ -18,7 +18,12 @@ import {
   Save,
 } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
-import { AVAILABLE_MODELS } from './Onboarding/FirstRunWizard';
+import {
+  AVAILABLE_MODELS,
+  PROVIDER_OPTIONS,
+  PROVIDER_MODELS,
+  type ProviderId,
+} from './Onboarding/FirstRunWizard';
 
 type SettingsTab = 'models' | 'rea' | 'privacy' | 'general';
 
@@ -36,7 +41,9 @@ export const SettingsModal: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('models');
 
-  // API Key state
+  // Provider & API Key state
+  const [modelProvider, setModelProvider] = useState<ProviderId>('anthropic');
+  const [providerBaseUrl, setProviderBaseUrl] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showReplaceKey, setShowReplaceKey] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -73,6 +80,8 @@ export const SettingsModal: React.FC = () => {
 
   useEffect(() => {
     if (settings) {
+      if (settings.modelProvider) setModelProvider(settings.modelProvider as ProviderId);
+      if (settings.providerBaseUrl) setProviderBaseUrl(settings.providerBaseUrl);
       setSelectedModel(settings.selectedModel || 'claude-3-7-sonnet-20250219');
       setCustomModel(settings.customModel || '');
       setNativeProvider(settings.nativeProvider || 'auto');
@@ -90,17 +99,29 @@ export const SettingsModal: React.FC = () => {
 
   if (!isSettingsOpen) return null;
 
+  const handleProviderChange = (newProvider: ProviderId) => {
+    setModelProvider(newProvider);
+    const models = PROVIDER_MODELS[newProvider] || [];
+    const recommended = models.find((m) => m.recommended) || models[0];
+    if (recommended) {
+      setSelectedModel(recommended.id);
+    }
+    if (newProvider === 'ollama' && !providerBaseUrl) {
+      setProviderBaseUrl('http://localhost:11434/v1');
+    }
+  };
+
   const handleSaveKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!apiKeyInput.trim()) return;
 
     try {
-      const res = await window.api.apiKey.set({ key: apiKeyInput.trim() });
+      const res = await window.api.apiKey.set({ key: apiKeyInput.trim(), provider: modelProvider });
       if (res.ok) {
         setHasApiKey(true);
         setApiKeyInput('');
         setShowReplaceKey(false);
-        setStatusMessage({ text: 'API Key securely stored in OS Keychain (safeStorage).' });
+        setStatusMessage({ text: `API Key for ${modelProvider} securely stored in OS Keychain (safeStorage).` });
       } else {
         setStatusMessage({ text: res.error, error: true });
       }
@@ -111,10 +132,10 @@ export const SettingsModal: React.FC = () => {
 
   const handleClearKey = async () => {
     try {
-      const res = await window.api.apiKey.clear();
+      const res = await window.api.apiKey.clear({ provider: modelProvider });
       if (res.ok) {
         setHasApiKey(false);
-        setStatusMessage({ text: 'API Key removed from OS Keychain.' });
+        setStatusMessage({ text: `API Key for ${modelProvider} removed from OS Keychain.` });
       } else {
         setStatusMessage({ text: res.error, error: true });
       }
@@ -126,6 +147,8 @@ export const SettingsModal: React.FC = () => {
   const handleSaveAllSettings = async () => {
     try {
       await updateSettings({
+        modelProvider,
+        providerBaseUrl: modelProvider === 'ollama' ? providerBaseUrl.trim() : undefined,
         selectedModel,
         customModel: selectedModel === 'custom' ? customModel.trim() : '',
         nativeProvider,
@@ -301,13 +324,68 @@ export const SettingsModal: React.FC = () => {
             {/* TAB: MODEL & API KEY */}
             {activeTab === 'models' && (
               <div className="space-y-5 animate-fadeIn">
+                {/* Provider Selection */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-200 block mb-1">
+                    Model Provider
+                  </label>
+                  <p className="text-[11px] text-slate-400 mb-2.5">
+                    Choose which AI provider or local offline engine runs your reverse-engineering investigations.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {PROVIDER_OPTIONS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleProviderChange(p.id)}
+                        className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                          modelProvider === p.id
+                            ? 'bg-indigo-600/20 border-indigo-500/60 text-white'
+                            : 'bg-slate-950/40 border-slate-800 text-slate-300 hover:bg-slate-800/40'
+                        }`}
+                      >
+                        <span className="text-xs font-semibold">{p.name}</span>
+                        <span className="text-[9px] mt-1 text-indigo-400">{p.badge}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {modelProvider === 'ollama' && (
+                  <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-200 block">
+                      Ollama / Local Endpoint URL:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="http://localhost:11434/v1"
+                      value={providerBaseUrl}
+                      onChange={(e) => setProviderBaseUrl(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Supports Ollama, LM Studio, vLLM, or any local OpenAI-compatible server.
+                    </p>
+                  </div>
+                )}
+
                 {/* API Key Section */}
                 <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-xs font-semibold text-slate-200 flex items-center space-x-1.5">
                         <Lock className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>Anthropic Claude API Key</span>
+                        <span>
+                          {modelProvider === 'anthropic'
+                            ? 'Anthropic Claude API Key'
+                            : modelProvider === 'openai'
+                            ? 'OpenAI API Key'
+                            : modelProvider === 'gemini'
+                            ? 'Google Gemini API Key'
+                            : modelProvider === 'openrouter'
+                            ? 'OpenRouter API Key'
+                            : 'Ollama API Key (Optional)'}
+                        </span>
                       </h3>
                       <p className="text-[11px] text-slate-500 mt-0.5">
                         Stored in your OS Keychain via Electron <code className="text-indigo-400">safeStorage</code>.
@@ -320,6 +398,10 @@ export const SettingsModal: React.FC = () => {
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
                           Active in Keychain
                         </span>
+                      ) : modelProvider === 'ollama' ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 border border-slate-700 font-medium">
+                          Optional for Local
+                        </span>
                       ) : (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 font-medium">
                           No Key Stored
@@ -331,7 +413,11 @@ export const SettingsModal: React.FC = () => {
                   {/* Masked status / Replace key */}
                   <div className="flex items-center justify-between pt-1">
                     <div className="text-xs font-mono text-slate-400">
-                      {hasApiKey ? '••••••••••••••••••••••••••••••••' : 'No API key configured'}
+                      {hasApiKey
+                        ? '••••••••••••••••••••••••••••••••'
+                        : modelProvider === 'ollama'
+                        ? 'No key needed for local Ollama'
+                        : 'No API key configured'}
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -362,7 +448,17 @@ export const SettingsModal: React.FC = () => {
                         <input
                           type="password"
                           data-testid="api-key-input"
-                          placeholder="sk-ant-api03-..."
+                          placeholder={
+                            modelProvider === 'anthropic'
+                              ? 'sk-ant-api03-...'
+                              : modelProvider === 'openai'
+                              ? 'sk-proj-...'
+                              : modelProvider === 'gemini'
+                              ? 'AIzaSy...'
+                              : modelProvider === 'openrouter'
+                              ? 'sk-or-v1-...'
+                              : 'Optional for Ollama'
+                          }
                           value={apiKeyInput}
                           onChange={(e) => setApiKeyInput(e.target.value)}
                           className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
@@ -388,7 +484,7 @@ export const SettingsModal: React.FC = () => {
                     Choose the active model for reverse engineering orchestration.
                   </p>
                   <div className="space-y-2">
-                    {AVAILABLE_MODELS.map((m) => (
+                    {(PROVIDER_MODELS[modelProvider] || []).map((m) => (
                       <div
                         key={m.id}
                         onClick={() => setSelectedModel(m.id)}
@@ -427,7 +523,7 @@ export const SettingsModal: React.FC = () => {
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. claude-3-7-sonnet-20250219"
+                        placeholder="e.g. custom-model-identifier"
                         value={customModel}
                         onChange={(e) => setCustomModel(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500"

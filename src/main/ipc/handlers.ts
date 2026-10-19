@@ -325,7 +325,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
       if (!parsed.success) {
         return makeError(`Invalid request: ${parsed.error.message}`);
       }
-      const success = keychain.setApiKey(parsed.data.key);
+      const provider = parsed.data.provider ?? settingsService.getSettings().modelProvider ?? 'anthropic';
+      const success = keychain.setApiKey(parsed.data.key, provider);
       return makeSuccess({ success });
     } catch (err: unknown) {
       return makeError(err instanceof Error ? err.message : String(err));
@@ -334,12 +335,30 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   ipcMain.handle(IPC_CHANNELS.API_KEY_HAS, async (_event, rawReq) => {
     try {
-      const parsed = HasApiKeyRequestSchema.safeParse(rawReq);
+      const parsed = HasApiKeyRequestSchema.safeParse(rawReq ?? {});
       if (!parsed.success) {
         return makeError(`Invalid request: ${parsed.error.message}`);
       }
-      const hasKey = keychain.hasApiKey() || !!process.env.ANTHROPIC_API_KEY;
-      const validated = HasApiKeyResponseSchema.parse({ hasKey });
+      const provider = parsed.data.provider ?? settingsService.getSettings().modelProvider ?? 'anthropic';
+      let hasKey = keychain.hasApiKey(provider);
+
+      // Environment variable fallbacks
+      if (!hasKey) {
+        if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
+          hasKey = true;
+        } else if (provider === 'openai' && process.env.OPENAI_API_KEY) {
+          hasKey = true;
+        } else if (provider === 'gemini' && (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) {
+          hasKey = true;
+        } else if (provider === 'openrouter' && process.env.OPENROUTER_API_KEY) {
+          hasKey = true;
+        } else if (provider === 'ollama') {
+          // Ollama does not require an API key for local usage
+          hasKey = true;
+        }
+      }
+
+      const validated = HasApiKeyResponseSchema.parse({ hasKey, provider });
       return makeSuccess(validated);
     } catch (err: unknown) {
       return makeError(err instanceof Error ? err.message : String(err));
@@ -348,11 +367,12 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   ipcMain.handle(IPC_CHANNELS.API_KEY_CLEAR, async (_event, rawReq) => {
     try {
-      const parsed = ClearApiKeyRequestSchema.safeParse(rawReq);
+      const parsed = ClearApiKeyRequestSchema.safeParse(rawReq ?? {});
       if (!parsed.success) {
         return makeError(`Invalid request: ${parsed.error.message}`);
       }
-      const success = keychain.clearApiKey();
+      const provider = parsed.data.provider;
+      const success = keychain.clearApiKey(provider);
       return makeSuccess({ success });
     } catch (err: unknown) {
       return makeError(err instanceof Error ? err.message : String(err));

@@ -8,6 +8,12 @@ import type {
   PermissionResult,
   McpStdioServerConfig,
 } from '@anthropic-ai/claude-agent-sdk';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import {
+  runOpenAiCompatibleTurn,
+  type OpenAiCompatibleRunnerParams,
+} from './openAiCompatibleRunner';
 import { buildSystemPrompt, type SystemPromptContext } from '../prompts/system';
 import { ALL_REA_TOOLS, isRiskyTool, cleanToolName } from './reaTools';
 import { keychain } from '../keychain';
@@ -15,6 +21,7 @@ import { sessionService } from './session';
 import { settingsService } from './settings';
 import { processManager } from './processManager';
 import { resolveReaMcpCommand } from './pathResolver';
+import type { AppSettings } from '../../shared/ipc';
 import type {
   AgentEvent,
   AssistantTextDeltaEvent,
@@ -33,8 +40,11 @@ export type SdkQueryFn = (params: {
   options?: Options;
 }) => Query;
 
+export type OpenAiRunnerFn = (params: OpenAiCompatibleRunnerParams) => Promise<string>;
+
 export interface AgentServiceOptions {
   queryRunner?: SdkQueryFn;
+  openAiRunner?: OpenAiRunnerFn;
   approvalTimeoutMs?: number;
 }
 
@@ -45,6 +55,7 @@ interface PendingApproval {
 
 export class AgentService {
   private queryRunner: SdkQueryFn;
+  private openAiRunner: OpenAiRunnerFn;
   private approvalTimeoutMs: number;
   private activeQuery: Query | null = null;
   private abortController: AbortController | null = null;
@@ -53,9 +64,12 @@ export class AgentService {
   private pendingApprovals = new Map<string, PendingApproval>();
   private listeners = new Set<EventListener>();
   private mcpCrashCount = 0;
+  private mcpClient: Client | null = null;
+  private mcpTransport: StdioClientTransport | null = null;
 
   constructor(options?: AgentServiceOptions) {
     this.queryRunner = options?.queryRunner ?? defaultSdkQuery;
+    this.openAiRunner = options?.openAiRunner ?? runOpenAiCompatibleTurn;
     this.approvalTimeoutMs = options?.approvalTimeoutMs ?? 60_000;
   }
 
@@ -138,11 +152,27 @@ export class AgentService {
     }
 
     const sessionId = this.activeSessionId;
+    const settings = settingsService.getSettings();
+    const provider = settings.modelProvider || 'anthropic';
 
-    // 1. Validate API Key
-    const apiKey = keychain.getApiKey() || process.env.ANTHROPIC_API_KEY;
+    // 1. Validate API Key for active provider
+    let apiKey = keychain.getApiKey(provider);
     if (!apiKey) {
-      const errorMsg = 'Model provider API key is not configured. Please set your API key in Settings.';
+      if (provider === 'anthropic') {
+        apiKey = process.env.ANTHROPIC_API_KEY ?? null;
+      } else if (provider === 'openai') {
+        apiKey = process.env.OPENAI_API_KEY ?? null;
+      } else if (provider === 'gemini') {
+        apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+      } else if (provider === 'openrouter') {
+        apiKey = process.env.OPENROUTER_API_KEY ?? null;
+      } else if (provider === 'ollama') {
+        apiKey = 'ollama'; // Local Ollama does not require auth by default
+      }
+    }
+
+    if (!apiKey && provider !== 'ollama') {
+      const errorMsg = `Model provider (${provider}) API key is not configured. Please set your API key in Settings.`;
       this.emit({
         type: 'run_error',
         sessionId,
@@ -158,7 +188,11 @@ export class AgentService {
       content: text,
     });
 
-    await this.runTurnWithRetry(sessionId, text, apiKey);
+    if (provider === 'anthropic') {
+      await this.runTurnWithRetry(sessionId, text, apiKey!);
+    } else {
+      await this.runOpenAiTurn(sessionId, text, provider, apiKey || '', settings);
+    }
   }
 
   /**
@@ -203,6 +237,15 @@ export class AgentService {
    */
   public cleanup(): void {
     this.cancel();
+    if (this.mcpClient) {
+      try {
+        this.mcpClient.close();
+      } catch {
+        // ignore
+      }
+      this.mcpClient = null;
+      this.mcpTransport = null;
+    }
     processManager.killAll();
   }
 
@@ -408,7 +451,7 @@ export class AgentService {
     sessionId: string,
     toolName: string,
     input: Record<string, unknown>,
-    context: { title?: string; description?: string }
+    context?: { title?: string; description?: string }
   ): Promise<PermissionResult> {
     const rawToolName = cleanToolName(toolName);
 
@@ -421,8 +464,8 @@ export class AgentService {
     const approvalId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + this.approvalTimeoutMs).toISOString();
     const description =
-      context.title ||
-      context.description ||
+      context?.title ||
+      context?.description ||
       `This tool execution (${rawToolName}) interacts with or executes the target. User approval required.`;
 
     const permissionPromise = new Promise<PermissionResult>((resolve) => {
@@ -539,6 +582,197 @@ export class AgentService {
           error: resultMsg.error || resultMsg.result || 'Agent turn ended with error.',
         });
       }
+    }
+  }
+
+  /**
+   * Lazily spawns and connects to the REA MCP server via StdioClientTransport
+   * for non-Anthropic providers.
+   */
+  public async ensureMcpClient(): Promise<Client> {
+    if (this.mcpClient) {
+      return this.mcpClient;
+    }
+    const settings = settingsService.getSettings();
+    const resolved = resolveReaMcpCommand(settings.reaCommandOverride);
+    const envOverrides: Record<string, string> = {
+      NODE_NO_WARNINGS: '1',
+    };
+    if (settings.envOverrides) {
+      if (settings.envOverrides.REA_GHIDRA_STARTUP_TIMEOUT_MS) {
+        envOverrides.REA_GHIDRA_STARTUP_TIMEOUT_MS = String(settings.envOverrides.REA_GHIDRA_STARTUP_TIMEOUT_MS);
+      }
+      if (settings.envOverrides.REA_HOPPER_STARTUP_TIMEOUT_MS) {
+        envOverrides.REA_HOPPER_STARTUP_TIMEOUT_MS = String(settings.envOverrides.REA_HOPPER_STARTUP_TIMEOUT_MS);
+      }
+      if (settings.envOverrides.REA_JEB_MCP_URL) {
+        envOverrides.REA_JEB_MCP_URL = settings.envOverrides.REA_JEB_MCP_URL;
+      }
+      if (settings.envOverrides.REA_MCP_MAX_RESPONSE_BYTES) {
+        envOverrides.REA_MCP_MAX_RESPONSE_BYTES = String(settings.envOverrides.REA_MCP_MAX_RESPONSE_BYTES);
+      }
+    }
+
+    const cleanEnv: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined) cleanEnv[k] = v;
+    }
+    Object.assign(cleanEnv, envOverrides);
+
+    const transport = new StdioClientTransport({
+      command: resolved.command,
+      args: resolved.args,
+      env: cleanEnv,
+    });
+
+    const client = new Client(
+      { name: 'rea-studio-runner', version: '1.0.0' },
+      { capabilities: {} }
+    );
+
+    await client.connect(transport);
+    this.mcpClient = client;
+    this.mcpTransport = transport;
+    return client;
+  }
+
+  /**
+   * Orchestrates an OpenAI-compatible agent turn (OpenAI, Gemini, OpenRouter, Ollama)
+   * with streaming, REA MCP tool calling, and risky action approval gates.
+   */
+  private async runOpenAiTurn(
+    sessionId: string,
+    prompt: string,
+    provider: 'openai' | 'gemini' | 'openrouter' | 'ollama',
+    apiKey: string,
+    settings: AppSettings
+  ): Promise<void> {
+    if (!this.activeTargetContext) return;
+    this.abortController = new AbortController();
+
+    let mcpClient: Client;
+    try {
+      mcpClient = await this.ensureMcpClient();
+    } catch (err: unknown) {
+      this.emit({
+        type: 'run_error',
+        sessionId,
+        error: `Failed to connect to REA MCP server: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      return;
+    }
+
+    let tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> = [];
+    try {
+      const toolsResult = await mcpClient.listTools();
+      tools = toolsResult.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema as Record<string, unknown>,
+      }));
+    } catch (err: unknown) {
+      this.emit({
+        type: 'run_error',
+        sessionId,
+        error: `Failed to list REA tools: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      return;
+    }
+
+    const session = sessionService.get(sessionId);
+    const history = (session?.messages || []).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const resolvedModel =
+      settings.selectedModel === 'custom' && settings.customModel
+        ? settings.customModel
+        : settings.selectedModel ||
+          (provider === 'openai' ? 'gpt-4o' : provider === 'gemini' ? 'gemini-2.5-flash' : 'default');
+
+    let accumulatedText = '';
+
+    try {
+      await this.openAiRunner({
+        provider,
+        baseUrl: settings.providerBaseUrl,
+        apiKey,
+        model: resolvedModel,
+        systemPrompt: buildSystemPrompt(this.activeTargetContext),
+        history,
+        prompt,
+        tools,
+        signal: this.abortController.signal,
+        onDelta: (delta) => {
+          accumulatedText += delta;
+          this.emit({
+            type: 'assistant_text_delta',
+            sessionId,
+            textDelta: delta,
+          });
+        },
+        onToolCallStart: (callId, name, input) => {
+          const isRisky = isRiskyTool(cleanToolName(name));
+          this.emit({
+            type: 'tool_call_started',
+            sessionId,
+            toolCallId: callId,
+            toolName: name,
+            input: (input as Record<string, unknown>) || {},
+            isRisky,
+          });
+        },
+        onToolCallResult: (callId, _name, _input, result) => {
+          this.emit({
+            type: 'tool_call_result',
+            sessionId,
+            toolCallId: callId,
+            output: result,
+          });
+        },
+        onToolCallError: (callId, _name, _input, error) => {
+          this.emit({
+            type: 'tool_call_error',
+            sessionId,
+            toolCallId: callId,
+            error,
+          });
+        },
+        checkPermission: async (name, input) => {
+          const res = await this.handleToolPermission(sessionId, name, (input as Record<string, unknown>) || {});
+          return res.behavior === 'allow';
+        },
+        executeTool: async (name, input) => {
+          const res = await mcpClient.callTool({
+            name,
+            arguments: (input as Record<string, unknown>) || {},
+          });
+          return res.content;
+        },
+      });
+
+      // Save assistant message to session
+      sessionService.addMessage(sessionId, {
+        sessionId,
+        role: 'agent',
+        content: accumulatedText,
+      });
+
+      this.emit({
+        type: 'run_finished',
+        sessionId,
+        fullText: accumulatedText,
+      });
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      this.emit({
+        type: 'run_error',
+        sessionId,
+        error: errMsg,
+      });
+    } finally {
+      this.abortController = null;
     }
   }
 }

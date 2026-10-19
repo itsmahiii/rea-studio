@@ -11,6 +11,8 @@ describe('Settings & Onboarding UI', () => {
   const mockSettings: AppSettings = {
     hasAcceptedLegal: false,
     hasCompletedOnboarding: false,
+    modelProvider: 'anthropic',
+    providerBaseUrl: '',
     selectedModel: 'claude-3-7-sonnet-20250219',
     customModel: '',
     nativeProvider: 'auto',

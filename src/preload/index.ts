@@ -15,7 +15,9 @@ import {
   type RespondApprovalRequest,
   type RespondApprovalResponse,
   type SetApiKeyRequest,
+  type HasApiKeyRequest,
   type HasApiKeyResponse,
+  type ClearApiKeyRequest,
   type ClearApiKeyResponse,
   type SaveReportRequest,
   type SaveReportResponse,
@@ -87,10 +89,10 @@ const api: ElectronAPI = {
   apiKey: {
     set: (req: SetApiKeyRequest): Promise<IpcResult<{ success: boolean }>> =>
       ipcRenderer.invoke(IPC_CHANNELS.API_KEY_SET, req),
-    has: (): Promise<IpcResult<HasApiKeyResponse>> =>
-      ipcRenderer.invoke(IPC_CHANNELS.API_KEY_HAS, {}),
-    clear: (): Promise<IpcResult<ClearApiKeyResponse>> =>
-      ipcRenderer.invoke(IPC_CHANNELS.API_KEY_CLEAR, {}),
+    has: (req?: HasApiKeyRequest): Promise<IpcResult<HasApiKeyResponse>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.API_KEY_HAS, req ?? {}),
+    clear: (req?: ClearApiKeyRequest): Promise<IpcResult<ClearApiKeyResponse>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.API_KEY_CLEAR, req ?? {}),
   },
 
   export: {

@@ -16,29 +16,152 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 
-export const AVAILABLE_MODELS = [
-  {
-    id: 'claude-3-7-sonnet-20250219',
-    name: 'Claude 3.7 Sonnet',
-    description: 'Anthropic flagship hybrid reasoning model — recommended for deep reverse engineering',
-    recommended: true,
-  },
-  {
-    id: 'claude-3-5-sonnet-20241022',
-    name: 'Claude 3.5 Sonnet v2',
-    description: 'High-speed analysis, excellent code understanding and decompiler output parsing',
-  },
-  {
-    id: 'claude-3-5-haiku-20241022',
-    name: 'Claude 3.5 Haiku',
-    description: 'Fastest turn times for quick triage and preliminary target string inspection',
-  },
-  {
-    id: 'custom',
-    name: 'Custom Model Identifier',
-    description: 'Specify an arbitrary compatible model string',
-  },
-];
+export interface ModelOption {
+  id: string;
+  name: string;
+  description: string;
+  recommended?: boolean;
+}
+
+export const PROVIDER_OPTIONS = [
+  { id: 'anthropic', name: 'Anthropic (Claude)', badge: 'Recommended' },
+  { id: 'openai', name: 'OpenAI (GPT-4o / o-Series)', badge: 'Popular' },
+  { id: 'gemini', name: 'Google Gemini', badge: 'Fast' },
+  { id: 'openrouter', name: 'OpenRouter (Multi-Model)', badge: 'Aggregator' },
+  { id: 'ollama', name: 'Ollama / Local LLM', badge: 'Offline & Private' },
+] as const;
+
+export type ProviderId = (typeof PROVIDER_OPTIONS)[number]['id'];
+
+export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
+  anthropic: [
+    {
+      id: 'claude-3-7-sonnet-20250219',
+      name: 'Claude 3.7 Sonnet',
+      description: 'Anthropic flagship hybrid reasoning model — recommended for deep reverse engineering',
+      recommended: true,
+    },
+    {
+      id: 'claude-3-5-sonnet-20241022',
+      name: 'Claude 3.5 Sonnet v2',
+      description: 'High-speed analysis, excellent code understanding and decompiler output parsing',
+    },
+    {
+      id: 'claude-3-5-haiku-20241022',
+      name: 'Claude 3.5 Haiku',
+      description: 'Fastest turn times for quick triage and preliminary target string inspection',
+    },
+    {
+      id: 'custom',
+      name: 'Custom Model Identifier',
+      description: 'Specify an arbitrary compatible Anthropic model string',
+    },
+  ],
+  openai: [
+    {
+      id: 'gpt-4o',
+      name: 'GPT-4o',
+      description: 'OpenAI flagship multimodal intelligence with fast tool calling',
+      recommended: true,
+    },
+    {
+      id: 'gpt-4o-mini',
+      name: 'GPT-4o Mini',
+      description: 'Lightweight, rapid response model for triage',
+    },
+    {
+      id: 'o3-mini',
+      name: 'o3-mini',
+      description: 'Reasoning model optimized for complex STEM and coding problems',
+    },
+    {
+      id: 'o1',
+      name: 'o1',
+      description: 'High-depth reasoning model for difficult structural analysis',
+    },
+    {
+      id: 'custom',
+      name: 'Custom Model Identifier',
+      description: 'Specify an arbitrary OpenAI model string',
+    },
+  ],
+  gemini: [
+    {
+      id: 'gemini-2.5-flash',
+      name: 'Gemini 2.5 Flash',
+      description: 'High speed, huge context window with strong reasoning capabilities',
+      recommended: true,
+    },
+    {
+      id: 'gemini-2.5-pro',
+      name: 'Gemini 2.5 Pro',
+      description: 'Deep reasoning and complex multimodal target analysis',
+    },
+    {
+      id: 'gemini-1.5-pro',
+      name: 'Gemini 1.5 Pro',
+      description: '2M token context window for analyzing massive disassembly dumps',
+    },
+    {
+      id: 'custom',
+      name: 'Custom Model Identifier',
+      description: 'Specify an arbitrary Google Gemini model string',
+    },
+  ],
+  openrouter: [
+    {
+      id: 'anthropic/claude-3.7-sonnet',
+      name: 'Claude 3.7 Sonnet (OpenRouter)',
+      description: 'Hybrid reasoning via OpenRouter API',
+      recommended: true,
+    },
+    {
+      id: 'deepseek/deepseek-r1',
+      name: 'DeepSeek R1 (OpenRouter)',
+      description: 'Open reasoning model with strong math and code decompilation logic',
+    },
+    {
+      id: 'openai/gpt-4o',
+      name: 'GPT-4o (OpenRouter)',
+      description: 'Omni-model through OpenRouter gateway',
+    },
+    {
+      id: 'meta-llama/llama-3.3-70b-instruct',
+      name: 'Llama 3.3 70B (OpenRouter)',
+      description: 'Open weights model through OpenRouter',
+    },
+    {
+      id: 'custom',
+      name: 'Custom Model Identifier',
+      description: 'Specify an arbitrary OpenRouter model route',
+    },
+  ],
+  ollama: [
+    {
+      id: 'qwen2.5-coder:32b',
+      name: 'Qwen 2.5 Coder (32B)',
+      description: 'State of the art open code LLM running 100% locally on your machine',
+      recommended: true,
+    },
+    {
+      id: 'deepseek-r1:14b',
+      name: 'DeepSeek R1 (14B/32B)',
+      description: 'Local reasoning model running on Ollama',
+    },
+    {
+      id: 'llama3.3:70b',
+      name: 'Llama 3.3 (70B)',
+      description: 'General purpose local model',
+    },
+    {
+      id: 'custom',
+      name: 'Custom Model Identifier',
+      description: 'Specify your local Ollama or LM Studio model tag',
+    },
+  ],
+};
+
+export const AVAILABLE_MODELS = PROVIDER_MODELS.anthropic;
 
 export const NATIVE_PROVIDERS_WIZARD = [
   {
@@ -90,7 +213,9 @@ export const FirstRunWizard: React.FC = () => {
   // Step 1: Legal & Authorization state
   const [legalAccepted, setLegalAccepted] = useState(false);
 
-  // Step 2: Model & API Key state
+  // Step 2: Provider, Model & API Key state
+  const [modelProvider, setModelProvider] = useState<ProviderId>('anthropic');
+  const [providerBaseUrl, setProviderBaseUrl] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [selectedModel, setSelectedModel] = useState('claude-3-7-sonnet-20250219');
   const [customModel, setCustomModel] = useState('');
@@ -102,6 +227,8 @@ export const FirstRunWizard: React.FC = () => {
   useEffect(() => {
     if (settings) {
       if (settings.hasAcceptedLegal) setLegalAccepted(true);
+      if (settings.modelProvider) setModelProvider(settings.modelProvider as ProviderId);
+      if (settings.providerBaseUrl) setProviderBaseUrl(settings.providerBaseUrl);
       if (settings.selectedModel) setSelectedModel(settings.selectedModel);
       if (settings.customModel) setCustomModel(settings.customModel);
       if (settings.nativeProvider) setSelectedProvider(settings.nativeProvider);
@@ -118,14 +245,26 @@ export const FirstRunWizard: React.FC = () => {
     }
   };
 
+  const handleProviderChange = (newProvider: ProviderId) => {
+    setModelProvider(newProvider);
+    const models = PROVIDER_MODELS[newProvider] || [];
+    const recommended = models.find((m) => m.recommended) || models[0];
+    if (recommended) {
+      setSelectedModel(recommended.id);
+    }
+    if (newProvider === 'ollama' && !providerBaseUrl) {
+      setProviderBaseUrl('http://localhost:11434/v1');
+    }
+  };
+
   const handleSaveApiKey = async () => {
     if (!apiKeyInput.trim()) return;
     try {
-      const res = await window.api.apiKey.set({ key: apiKeyInput.trim() });
+      const res = await window.api.apiKey.set({ key: apiKeyInput.trim(), provider: modelProvider });
       if (res.ok) {
         setHasApiKey(true);
         setApiKeyInput('');
-        setKeySaveStatus('API key safely encrypted in OS Keychain.');
+        setKeySaveStatus(`API key for ${modelProvider} safely encrypted in OS Keychain.`);
       } else {
         setKeySaveStatus(`Failed: ${res.error}`);
       }
@@ -138,6 +277,8 @@ export const FirstRunWizard: React.FC = () => {
     await updateSettings({
       hasAcceptedLegal: true,
       hasCompletedOnboarding: true,
+      modelProvider,
+      providerBaseUrl: modelProvider === 'ollama' ? providerBaseUrl.trim() : undefined,
       selectedModel,
       customModel: selectedModel === 'custom' ? customModel.trim() : '',
       nativeProvider: selectedProvider,
@@ -269,15 +410,60 @@ export const FirstRunWizard: React.FC = () => {
           {/* STEP 2: Model & API Key */}
           {step === 2 && (
             <div className="space-y-4 animate-fadeIn">
+              {/* Provider Selection */}
+              <div>
+                <label className="text-xs font-semibold text-slate-200 block mb-1">
+                  Model Provider
+                </label>
+                <p className="text-[11px] text-slate-400 mb-2">
+                  Choose your preferred AI provider or local offline engine.
+                </p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {PROVIDER_OPTIONS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleProviderChange(p.id)}
+                      className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                        modelProvider === p.id
+                          ? 'bg-indigo-600/20 border-indigo-500/60 text-white'
+                          : 'bg-slate-950/40 border-slate-800 text-slate-300 hover:bg-slate-800/40'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold">{p.name}</span>
+                      <span className="text-[9px] mt-1 text-indigo-400">{p.badge}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {modelProvider === 'ollama' && (
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-200 block">
+                    Ollama / Local Endpoint URL:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="http://localhost:11434/v1"
+                    value={providerBaseUrl}
+                    onChange={(e) => setProviderBaseUrl(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Supports Ollama, LM Studio, vLLM, or any local OpenAI-compatible server.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-semibold text-slate-200 block mb-1">
                   1. Model Selection
                 </label>
                 <p className="text-[11px] text-slate-400 mb-2">
-                  Select the Anthropic Claude model to orchestrate your reverse-engineering investigations.
+                  Select the {modelProvider === 'anthropic' ? 'Anthropic Claude' : modelProvider.toUpperCase()} model to orchestrate your reverse-engineering investigations.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
-                  {AVAILABLE_MODELS.map((m) => (
+                  {(PROVIDER_MODELS[modelProvider] || []).map((m) => (
                     <div
                       key={m.id}
                       onClick={() => setSelectedModel(m.id)}
@@ -312,7 +498,7 @@ export const FirstRunWizard: React.FC = () => {
                   <div className="mt-2.5">
                     <input
                       type="text"
-                      placeholder="e.g. claude-3-7-sonnet-20250219"
+                      placeholder="e.g. custom-model-identifier"
                       value={customModel}
                       onChange={(e) => setCustomModel(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
@@ -323,14 +509,14 @@ export const FirstRunWizard: React.FC = () => {
 
               <div className="pt-2">
                 <label className="text-xs font-semibold text-slate-200 block mb-1">
-                  2. Anthropic API Key (Encrypted in OS Keychain)
+                  2. {modelProvider === 'anthropic' ? 'Anthropic' : modelProvider === 'openai' ? 'OpenAI' : modelProvider === 'gemini' ? 'Google Gemini' : modelProvider === 'openrouter' ? 'OpenRouter' : 'Ollama'} API Key {modelProvider === 'ollama' ? '(Optional)' : '(Encrypted in OS Keychain)'}
                 </label>
                 <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-400 flex items-center space-x-1.5">
                       <Lock className="w-3.5 h-3.5 text-indigo-400" />
                       <span>
-                        {hasApiKey ? 'Key is currently active in OS Keychain' : 'No key detected in Keychain'}
+                        {hasApiKey ? 'Key is currently active in OS Keychain' : modelProvider === 'ollama' ? 'No key required for local Ollama' : 'No key detected in Keychain'}
                       </span>
                     </span>
                     {hasApiKey && (
@@ -343,7 +529,19 @@ export const FirstRunWizard: React.FC = () => {
                   <div className="flex space-x-2">
                     <input
                       type="password"
-                      placeholder={hasApiKey ? '••••••••••••••••••••••••••••••••' : 'sk-ant-api03-...'}
+                      placeholder={
+                        hasApiKey
+                          ? '••••••••••••••••••••••••••••••••'
+                          : modelProvider === 'anthropic'
+                          ? 'sk-ant-api03-...'
+                          : modelProvider === 'openai'
+                          ? 'sk-proj-...'
+                          : modelProvider === 'gemini'
+                          ? 'AIzaSy...'
+                          : modelProvider === 'openrouter'
+                          ? 'sk-or-v1-...'
+                          : 'Optional for Ollama'
+                      }
                       value={apiKeyInput}
                       onChange={(e) => setApiKeyInput(e.target.value)}
                       className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
