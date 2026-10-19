@@ -90,7 +90,7 @@ export const App: React.FC = () => {
       } else if (statusEvt.status === 'awaiting_approval') {
         setRunState('waiting_approval');
       } else if (statusEvt.status === 'error') {
-        setRunState('error', null, 'An error occurred during agent run');
+        setRunState('error', null, statusEvt.error || 'An error occurred during agent run');
       }
       setIsAgentThinking(
         statusEvt.status === 'thinking' ||

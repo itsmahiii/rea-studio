@@ -349,6 +349,7 @@ export const AgentStatusEventSchema = z.object({
   sessionId: z.string(),
   status: z.enum(['idle', 'thinking', 'executing_tool', 'awaiting_approval', 'error']),
   activeTool: z.string().optional(),
+  error: z.string().optional(),
 });
 export type AgentStatusEvent = z.infer<typeof AgentStatusEventSchema>;
 

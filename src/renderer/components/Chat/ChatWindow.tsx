@@ -9,6 +9,8 @@ import {
   KeyRound,
   ShieldAlert,
   Bot,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { MessageBubble } from './MessageBubble';
@@ -29,6 +31,7 @@ export const ChatWindow: React.FC = () => {
     removeApprovalRequest,
     setIsSettingsOpen,
     cancelRun,
+    setRunState,
   } = useAppStore();
 
   const [inputPrompt, setInputPrompt] = useState('');
@@ -283,6 +286,42 @@ export const ChatWindow: React.FC = () => {
 
       {/* Composer Section */}
       <footer className="p-4 border-t border-slate-800/80 bg-slate-900/70 backdrop-blur select-none">
+        {/* Agent Run Error Banner */}
+        {runError && (
+          <div
+            className="mb-3 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-start justify-between gap-3 text-rose-300 shadow-md"
+            data-testid="agent-error-banner"
+          >
+            <div className="flex items-start space-x-2.5 text-xs leading-relaxed">
+              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold text-rose-200">Investigation Error: </span>
+                <span className="whitespace-pre-wrap">{runError}</span>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 flex-shrink-0">
+              {runError.toLowerCase().includes('api key') && (
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="px-2.5 py-1 rounded-lg bg-rose-500/25 hover:bg-rose-500/35 text-rose-200 border border-rose-500/40 text-xs font-semibold transition"
+                >
+                  Configure Key
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setRunState('idle', null, null)}
+                className="p-1 rounded-lg hover:bg-rose-500/20 text-rose-400 hover:text-rose-200 transition text-xs"
+                title="Dismiss"
+                aria-label="Dismiss error"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Missing API Key Banner */}
         {!hasApiKey && (
           <div
@@ -291,7 +330,7 @@ export const ChatWindow: React.FC = () => {
           >
             <div className="flex items-center space-x-2 text-xs text-amber-300">
               <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0" />
-              <span>Anthropic API key required to converse with the agent.</span>
+              <span>Model provider API key required to converse with the agent.</span>
             </div>
             <button
               type="button"
@@ -313,7 +352,7 @@ export const ChatWindow: React.FC = () => {
             disabled={isComposerDisabled}
             placeholder={
               !hasApiKey
-                ? 'Please configure your Anthropic API key above to start chat...'
+                ? 'Please configure your model provider API key above to start chat...'
                 : isRunning
                 ? 'Agent is working... click Stop to cancel.'
                 : 'Ask REA to decompile, map IPC, audit security fuses, or trace evidence... (Enter to send, Shift+Enter for newline)'

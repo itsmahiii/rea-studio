@@ -127,6 +127,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         win.webContents.send(IPC_CHANNELS.EVENT_AGENT_STATUS, {
           sessionId: event.sessionId,
           status: 'error',
+          error: event.error,
         });
         break;
     }
@@ -268,8 +269,17 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         return makeError(`Invalid request: ${parsed.error.message}`);
       }
       // Trigger agent message asynchronously
-      agentService.sendMessage(parsed.data.content).catch((err) => {
+      agentService.sendMessage(parsed.data.content, parsed.data.sessionId).catch((err) => {
         console.error('Agent send failed:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const win = getMainWindow();
+        if (win && !win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.EVENT_AGENT_STATUS, {
+            sessionId: parsed.data.sessionId,
+            status: 'error',
+            error: errMsg,
+          });
+        }
       });
 
       const validated = SendAgentMessageResponseSchema.parse({

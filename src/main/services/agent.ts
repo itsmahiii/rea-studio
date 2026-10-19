@@ -146,9 +146,13 @@ export class AgentService {
   /**
    * Send a user message to the active session and orchestrate the agent run.
    */
-  public async sendMessage(text: string): Promise<void> {
+  public async sendMessage(text: string, targetSessionId?: string): Promise<void> {
+    if (targetSessionId && (!this.activeSessionId || this.activeSessionId !== targetSessionId)) {
+      await this.resume(targetSessionId);
+    }
+
     if (!this.activeSessionId || !this.activeTargetContext) {
-      throw new Error('No active session. Call startSession() or resume() first.');
+      throw new Error('No active investigation session. Please select or add a target first.');
     }
 
     const sessionId = this.activeSessionId;
@@ -287,11 +291,14 @@ export class AgentService {
       throw new Error(fullError);
     }
 
-    const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      PATH: resolved.enrichedPath,
-      NODE_NO_WARNINGS: '1',
-    };
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (typeof v === 'string') {
+        env[k] = v;
+      }
+    }
+    env.PATH = resolved.enrichedPath;
+    env.NODE_NO_WARNINGS = '1';
 
     if (settings.envOverrides) {
       if (settings.envOverrides.REA_GHIDRA_STARTUP_TIMEOUT_MS) {
@@ -377,7 +384,9 @@ export class AgentService {
       model: resolvedModel,
       abortController: this.abortController,
       env: {
-        ...process.env,
+        ...Object.fromEntries(
+          Object.entries(process.env).filter(([_, v]) => typeof v === 'string')
+        ),
         ANTHROPIC_API_KEY: apiKey,
       },
       // 1. Restrict to REA MCP Server only
