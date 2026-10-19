@@ -16,12 +16,29 @@ vi.mock('child_process', () => ({
   }),
 }));
 
+import * as os from 'os';
+
 describe('SettingsService', () => {
   let service: SettingsService;
+  let testSettingsPath: string;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new SettingsService();
+    testSettingsPath = path.join(
+      os.tmpdir(),
+      `test-rea-settings-${Date.now()}-${Math.random().toString(36).substring(2)}.json`
+    );
+    service = new SettingsService(testSettingsPath);
+  });
+
+  afterEach(() => {
+    try {
+      if (fs.existsSync(testSettingsPath)) {
+        fs.unlinkSync(testSettingsPath);
+      }
+    } catch {
+      // ignore
+    }
   });
 
   it('loads default settings when no config file exists', () => {

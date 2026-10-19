@@ -44,9 +44,10 @@ function isElectronAppDirectory(dirPath: string): boolean {
     const pkgPath = path.join(dirPath, 'package.json');
     if (fs.existsSync(pkgPath)) {
       // Safe check: verify realpath does not escape dirPath
+      const realDir = fs.realpathSync(dirPath);
       const realPkg = fs.realpathSync(pkgPath);
-      const rel = path.relative(dirPath, realPkg);
-      if (!rel.startsWith('..')) {
+      const rel = path.relative(realDir, realPkg);
+      if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
         const content = fs.readFileSync(pkgPath, 'utf-8');
         try {
           const pkg = JSON.parse(content);

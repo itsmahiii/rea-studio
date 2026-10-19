@@ -48,8 +48,8 @@ export class SettingsService {
   private settingsFile: string;
   private settings: AppSettings;
 
-  constructor() {
-    this.settingsFile = path.join(getUserDataPath(), 'rea_settings.json');
+  constructor(customPath?: string) {
+    this.settingsFile = customPath || path.join(getUserDataPath(), 'rea_settings.json');
     this.settings = this.loadFromDisk();
   }
 
