@@ -14,6 +14,8 @@ yarn-debug.log*
 yarn-error.log*
 .agents/scratch/
 .tmp-*/
+*.rar
+*.7z
 .env
 .env.*
 !.env.example
